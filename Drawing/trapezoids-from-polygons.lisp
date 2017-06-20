@@ -9,7 +9,7 @@
 ;;; entirely contained in another polygon, and two polygons can touch,
 ;;; but their permiters can not cross.
 ;;;
-;;; Initially, each polygon is represented as a list points
+;;; Initially, each polygon is represented as a list of points
 ;;; represented as CONS cells of the form (x . y) where x and y are
 ;;; the coordinates of the point in the form of real numbers.  The
 ;;; order of the points in the list is the order of the points around
@@ -85,11 +85,11 @@
 	       (setf rest (cdr rest)))
 	finally (return rest)))
 	     
-;; When there are three or more consecutive points with the same
-;; y-value, only keep the first and the last.  This cleanup is crucial
-;; to apply before further processing, because we rely on the fact
-;; that any horizontal line segment is preceded and followed by line
-;; segments that are not horizontal.
+;;; When there are three or more consecutive points with the same
+;;; y-value, only keep the first and the last.  This cleanup is
+;;; crucial to apply before further processing, because we rely on the
+;;; fact that any horizontal line segment is preceded and followed by
+;;; line segments that are not horizontal.
 (defun merge-consecutive-horizontal-lines (points)	       
   (loop with rest = points
 	repeat (element-count points)

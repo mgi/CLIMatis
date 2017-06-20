@@ -1,29 +1,46 @@
 (in-package #:clim3-command)
 
+(defclass command (standard-generic-function)
+  ((%types :initarg :types :reader types))
+  (:metaclass #.(class-name (class-of (find-class 'standard-generic-function)))))
+
+(defun split-lambda-list (lambda-list)
+  (let* ((position-or-nil (position-if (lambda (item)
+					 (member item lambda-list-keywords
+						 :test #'eq))
+				       lambda-list))
+	 (position (if (null position-or-nil)
+		       (length lambda-list)
+		       position-or-nil)))
+    (values (subseq lambda-list 0 position)
+	    (subseq lambda-list position))))
+
+(defun extract-lambda-lists (lambda-list)
+  (multiple-value-bind (required remaining)
+      (split-lambda-list lambda-list)
+    (let ((ordinary-required
+	    (loop for req in required
+		  collect (if (symbolp req) req (first req))))
+	  (gf-remaining
+	    (loop for element in remaining
+		  collect (cond ((symbolp element) element)
+				((symbolp (first element)) (first element))
+				(t (second (first element)))))))
+      (values (loop for req in required
+		    collect (if (symbolp req) t (second req)))
+	      (append ordinary-required gf-remaining)
+	      (append ordinary-required remaining)))))
+
 (defparameter *required-types* nil)
 
-(defmacro clim3:define-command (name params &body body)
-  (let* ((pos (position-if (lambda (item)
-			     (member item lambda-list-keywords
-				     :test #'eq))
-			   params))
-	 (required (subseq params 0 pos))
-	 (rest (if (null pos) '() (subseq params pos)))
-	 (params-sym (gensym))
-	 (required-types (loop for param in required
-			       collect (if (symbolp param)
-					   t
-					   (cadr param))))
-	 (required-names (loop for param in required
-			       collect (if (symbolp param)
-					   param
-					   (car param)))))
-    `(defun ,name (&rest ,params-sym)
-       (flet ((aux ,(append required-names rest)
-		,@body))
-	 (if *required-types*
-	     ',required-types
-	     (apply #'aux ,params-sym))))))
+(defmacro clim3:define-command (name lambda-list &body body)
+  (multiple-value-bind (types gf-lambda-list method-lambda-list)
+      (extract-lambda-lists lambda-list)
+    `(progn (defgeneric ,name ,gf-lambda-list
+	      (:method ,method-lambda-list ,@body)
+	      (:generic-function-class command))
+	    (reinitialize-instance #',name
+				   :types ',types))))
 
 (defgeneric clim3:command-table (view))
 
@@ -66,6 +83,9 @@
 
 (defgeneric clim3:command-loop-iteration (application view))
 
+(defun required-types (command-name)
+  (types (fdefinition command-name)))
+
 (defmethod clim3:command-loop-iteration (application view)
   (declare (ignore application))
   (let* ((action (clim3:acquire-action view))
@@ -73,14 +93,11 @@
 	   (if (symbolp action) action (car action)))
 	 (initial-arguments 
 	   (if (symbolp action) '() (cdr action)))
-	 (required-types
-	   (let ((*required-types* t))
-	     (funcall command-name)))
+	 (required-types (required-types command-name))
 	 (arguments
 	   (acquire-arguments required-types initial-arguments)))
     (apply command-name arguments)))
   
-
 (defun clim3:command-loop ()
   (let ((clim3-ext:*input-context* 'nil))
     (loop do (let ((view (clim3:current-view clim3:*application*)))
